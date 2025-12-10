@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+
+    <h2 class="text-center mb-4">Gestión de Usuarios</h2>
+
+    
+    <table class="table table-bordered table-striped">
+        <thead class="table-dark">
+            <tr>
+                <th>ID</th>
+                <th>Usuario</th>
+                <th>Rol</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for usuario in usuarios %}
+            <tr>
+                <td>{{ usuario.id }}</td>
+                <td>{{ usuario.username }}</td>
+                <td>{{ usuario.role }}</td>
+                <td>
+
+                    
+                    <a href="{{ url_for('editar_usuario', id=usuario.id) }}"
+                       class="btn btn-warning btn-sm">Editar</a>
+
+                    
+                    {% if usuario.username != 'admin' %}
+                    <a href="{{ url_for('eliminar_usuario', user_id=usuario.id) }}"
+                       class="btn btn-danger btn-sm"
+                       onclick="return confirm('¿Eliminar usuario?');">
+                        Eliminar
+                    </a>
+                    {% endif %}
+
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <hr>
+
+    
+    <h4>Agregar nuevo usuario</h4>
+
+    <form method="POST" action="{{ url_for('usuarios') }}">
+        <div class="row g-3">
+
+            <div class="col-md-4">
+                <label class="form-label">Nombre de usuario</label>
+                <input type="text" name="username" required class="form-control">
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">Contraseña</label>
+                <input type="password" name="password" required class="form-control">
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">Rol</label>
+                <select name="role" class="form-select" required>
+                    <option value="viewer">Viewer (solo lectura)</option>
+                    <option value="staff">Staff (editar y agregar)</option>
+                    <option value="admin">Admin (acceso total)</option>
+                </select>
+            </div>
+
+        </div>
+
+        <button class="btn btn-success mt-3">Crear usuario</button>
+    </form>
+
+</div>
+{% endblock %}

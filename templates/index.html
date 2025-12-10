@@ -1,0 +1,242 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container py-3">
+
+  
+  <div class="card p-3 mb-4 shadow-sm">
+    <h5 class="mb-3">Búsqueda avanzada</h5>
+
+    <form class="row g-2" method="GET" action="{{ url_for('index') }}">
+
+      <div class="col-md-3">
+        <input type="text" class="form-control" id="searchLive" placeholder="Buscar nombre..." value="{{ q_name }}">
+      </div>
+
+      <div class="col-md-3">
+        <select name="category" class="form-select">
+          <option value="">-- Todas las categorías --</option>
+          {% for c in categorias %}
+            <option value="{{ c.nombre }}" {% if q_cat == c.nombre %}selected{% endif %}>
+              {{ c.nombre }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-md-2">
+        <input type="number" class="form-control" name="min_stock" placeholder="Stock ≥" value="{{ q_min }}">
+      </div>
+
+      <div class="col-md-2">
+        <input type="number" class="form-control" name="max_stock" placeholder="Stock ≤" value="{{ q_max }}">
+      </div>
+
+      <div class="col-md-2">
+        <select name="state" class="form-select">
+          <option value="">-- Estado --</option>
+          <option value="bajo" {% if q_state == 'bajo' %}selected{% endif %}>Bajo</option>
+          <option value="normal" {% if q_state == 'normal' %}selected{% endif %}>Normal</option>
+        </select>
+      </div>
+
+      <div class="col-12 text-end mt-2">
+        <button class="btn btn-secondary" type="submit">Buscar</button>
+        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Limpiar</a>
+      </div>
+
+    </form>
+  </div>
+
+  
+  <div class="card p-3 mb-4 shadow-sm">
+
+    <h5 class="mb-3">Productos</h5>
+
+    <table class="table table-hover" id="tablaProductos">
+      <thead>
+        <tr>
+          <th style="cursor:pointer" onclick="sortTable(0)">ID ⬍</th>
+          <th style="cursor:pointer" onclick="sortTable(1)">Nombre ⬍</th>
+          <th style="cursor:pointer" onclick="sortTable(2)">Categoría ⬍</th>
+          <th style="cursor:pointer" onclick="sortTable(3)">Cantidad ⬍</th>
+          <th style="cursor:pointer" onclick="sortTable(4)">Mínimo</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+
+      <tbody id="tablaBody">
+        {% for p in productos %}
+        <tr class="{% if p.cantidad <= p.minimo %}table-danger{% endif %}">
+          <td>{{ p.id }}</td>
+          <td class="nombreCol">{{ p.nombre }}</td>
+          <td>{{ p.categoria.nombre }}</td>
+          <td>{{ p.cantidad }}</td>
+          <td>{{ p.minimo }}</td>
+
+          <td>
+            {% if current_user.is_staff() %}
+              
+              <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editModal{{ p.id }}">✏️</button>
+
+              
+              {% if current_user.is_admin() %}
+              <a href="{{ url_for('eliminar_producto', id=p.id) }}"
+                 class="btn btn-sm btn-danger"
+                 onclick="return confirm('¿Eliminar producto?')">
+                 🗑️
+              </a>
+              {% endif %}
+            {% else %}
+              <small class="text-muted">Sin permisos</small>
+            {% endif %}
+          </td>
+        </tr>
+
+      
+        <div class="modal fade" id="editModal{{ p.id }}" tabindex="-1">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <form method="POST" action="{{ url_for('editar_producto', id=p.id) }}">
+
+                <div class="modal-header">
+                  <h5 class="modal-title">Editar producto</h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+
+                  <div class="mb-2">
+                    <label class="form-label">Nombre</label>
+                    <input class="form-control" name="nombre" value="{{ p.nombre }}" required>
+                  </div>
+
+                  <div class="mb-2">
+                    <label class="form-label">Cantidad</label>
+                    <input class="form-control" type="number" name="cantidad" value="{{ p.cantidad }}" required>
+                  </div>
+
+                  <div class="mb-2">
+                    <label class="form-label">Mínimo</label>
+                    <input class="form-control" type="number" name="minimo" value="{{ p.minimo }}" required>
+                  </div>
+
+                  <div class="mb-2">
+                    <label class="form-label">Categoría</label>
+                    <select name="categoria" class="form-select" required>
+                      {% for c in categorias %}
+                        <option value="{{ c.id }}" {% if p.categoria_id == c.id %}selected{% endif %}>
+                          {{ c.nombre }}
+                        </option>
+                      {% endfor %}
+                    </select>
+                  </div>
+
+                </div>
+
+                <div class="modal-footer">
+                  <button class="btn btn-primary" type="submit">Guardar</button>
+                </div>
+
+              </form>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+
+  <div class="card p-3 shadow-sm">
+    <h5>Agregar producto</h5>
+
+    {% if current_user.is_staff() %}
+
+    <form method="POST" action="{{ url_for('agregar_producto') }}" class="row g-2">
+
+      <div class="col-md-4">
+        <input class="form-control" name="nombre" placeholder="Nombre" required>
+      </div>
+
+      <div class="col-md-2">
+        <input class="form-control" type="number" name="cantidad" placeholder="Cantidad" required>
+      </div>
+
+      <div class="col-md-2">
+        <input class="form-control" type="number" name="minimo" placeholder="Mínimo" required>
+      </div>
+
+      <div class="col-md-4">
+        <select name="categoria" class="form-select" required>
+          {% for c in categorias %}
+            <option value="{{ c.id }}">{{ c.nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-12 text-end mt-2">
+        <button class="btn btn-accent">Agregar</button>
+      </div>
+
+    </form>
+
+    {% else %}
+      <p>Debes iniciar sesión como personal autorizado para agregar productos.</p>
+    {% endif %}
+  </div>
+
+</div>
+
+
+
+<script>
+document.getElementById("searchLive").addEventListener("keyup", function() {
+    let filtro = this.value.toLowerCase();
+    let filas = document.querySelectorAll("#tablaBody tr");
+
+    filas.forEach(fila => {
+        let nombre = fila.querySelector(".nombreCol").textContent.toLowerCase();
+        fila.style.display = nombre.includes(filtro) ? "" : "none";
+    });
+});
+</script>
+
+
+<script>
+function sortTable(col) {
+    let table = document.getElementById("tablaProductos");
+    let switching = true;
+    let dir = "asc";
+
+    while (switching) {
+        switching = false;
+        let rows = table.rows;
+
+        for (let i = 1; i < rows.length - 1; i++) {
+            let x = rows[i].getElementsByTagName("td")[col];
+            let y = rows[i + 1].getElementsByTagName("td")[col];
+            let shouldSwitch = false;
+
+            if (dir === "asc" && x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {
+                shouldSwitch = true;
+            }
+            if (dir === "desc" && x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {
+                shouldSwitch = true;
+            }
+
+            if (shouldSwitch) {
+                rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+                switching = true;
+                break;
+            }
+        }
+
+        if (!switching && dir === "asc") {
+            dir = "desc";
+            switching = true;
+        }
+    }
+}
+</script>
+
+{% endblock %}

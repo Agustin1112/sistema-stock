@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Editar Producto</h2>
+<form method="POST" class="col-md-6">
+  <div class="mb-3">
+    <label class="form-label">Nombre</label>
+    <input type="text" name="nombre" value="{{ producto.nombre }}" class="form-control" required>
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Cantidad</label>
+    <input type="number" name="cantidad" value="{{ producto.cantidad }}" class="form-control" required>
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Stock mínimo</label>
+    <input type="number" name="minimo" value="{{ producto.minimo }}" class="form-control" required>
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Categoría</label>
+    <select name="categoria" class="form-select">
+      {% for c in categorias %}
+      <option value="{{ c.id }}" {% if producto.categoria_id == c.id %}selected{% endif %}>{{ c.nombre }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="btn btn-primary">💾 Actualizar</button>
+</form>
+{% endblock %}

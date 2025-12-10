@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Ingresá nueva contraseña</h2>
+<form method="POST">
+  <div class="mb-3">
+    <label>Nueva contraseña</label>
+    <input type="password" name="nueva" class="form-control" required>
+  </div>
+  <div class="mb-3">
+    <label>Repetir</label>
+    <input type="password" name="repetir" class="form-control" required>
+  </div>
+  <button class="btn btn-success">Actualizar contraseña</button>
+</form>
+{% endblock %}

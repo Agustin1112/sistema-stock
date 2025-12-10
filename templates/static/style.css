@@ -1,0 +1,8 @@
+
+.table-danger {
+  background-color: #ffe0e0 !important;
+}
+
+.card {
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+}

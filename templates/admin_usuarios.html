@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Gestión de Usuarios</h2>
+
+<table class="table">
+  <thead><tr><th>ID</th><th>Usuario</th><th>Role</th><th>Acciones</th></tr></thead>
+  <tbody>
+    {% for u in usuarios %}
+    <tr>
+      <td>{{ u.id }}</td>
+      <td>{{ u.usuario }}</td>
+      <td>{{ u.role }}</td>
+      <td>
+        <form style="display:inline" method="post" action="{{ url_for('admin_editar_usuario', user_id=u.id) }}">
+          <select name="role" class="form-select form-select-sm d-inline w-auto">
+            <option value="usuario" {% if u.role=='usuario' %}selected{% endif %}>usuario</option>
+            <option value="admin" {% if u.role=='admin' %}selected{% endif %}>admin</option>
+            <option value="superadmin" {% if u.role=='superadmin' %}selected{% endif %}>superadmin</option>
+          </select>
+          <button class="btn btn-sm btn-primary">Guardar</button>
+        </form>
+
+        {% if current_user.role == 'superadmin' %}
+        <form style="display:inline" method="post" action="{{ url_for('admin_eliminar_usuario', user_id=u.id) }}" onsubmit="return confirm('Eliminar usuario?');">
+          <button class="btn btn-sm btn-danger">Eliminar</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

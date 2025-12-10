@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Agregar Producto</h2>
+<form method="POST" class="col-md-6">
+  <div class="mb-3">
+    <label class="form-label">Nombre</label>
+    <input type="text" name="nombre" class="form-control" required>
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Cantidad</label>
+    <input type="number" name="cantidad" class="form-control" required>
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Stock mínimo</label>
+    <input type="number" name="minimo" class="form-control" required>
+  </div>
+  <div class="mb-3">
+    <label class="form-label">Categoría</label>
+    <select name="categoria" class="form-select" required>
+      {% for c in categorias %}
+      <option value="{{ c.id }}">{{ c.nombre }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit" class="btn btn-success">💾 Guardar</button>
+</form>
+{% endblock %}

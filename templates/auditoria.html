@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Auditoría</h2>
+
+<form class="row g-2 mb-3" method="get">
+  <div class="col-md-3"><input class="form-control" name="usuario" value="{{ q_user }}" placeholder="Usuario"></div>
+  <div class="col-md-4"><input class="form-control" name="accion" value="{{ q_accion }}" placeholder="Acción"></div>
+  <div class="col-md-2"><button class="btn btn-primary">Filtrar</button></div>
+</form>
+
+<table class="table table-sm">
+  <thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>IP</th></tr></thead>
+  <tbody>
+    {% for a in pag.items %}
+    <tr>
+      <td>{{ a.created_at.strftime("%d/%m/%Y %H:%M") }}</td>
+      <td>{{ a.usuario or "-" }}</td>
+      <td>{{ a.accion }}</td>
+      <td>{{ a.ip or "-" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<nav>
+  <ul class="pagination">
+    {% if pag.has_prev %}
+    <li class="page-item"><a class="page-link" href="{{ url_for('auditoria', page=pag.prev_num, usuario=q_user, accion=q_accion) }}">Prev</a></li>
+    {% endif %}
+    <li class="page-item disabled"><span class="page-link">Página {{ pag.page }} / {{ pag.pages }}</span></li>
+    {% if pag.has_next %}
+    <li class="page-item"><a class="page-link" href="{{ url_for('auditoria', page=pag.next_num, usuario=q_user, accion=q_accion) }}">Next</a></li>
+    {% endif %}
+  </ul>
+</nav>
+{% endblock %}

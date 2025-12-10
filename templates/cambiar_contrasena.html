@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4" style="max-width: 500px;">
+    <h2 class="mb-3">Cambiar Contraseña</h2>
+
+    <form method="POST">
+        <div class="mb-3">
+            <label>Contraseña Actual</label>
+            <input type="password" name="actual" class="form-control" required>
+        </div>
+
+        <div class="mb-3">
+            <label>Nueva Contraseña</label>
+            <input type="password" name="nueva" class="form-control" required>
+        </div>
+
+        <div class="mb-3">
+            <label>Confirmar Nueva Contraseña</label>
+            <input type="password" name="confirmar" class="form-control" required>
+        </div>
+
+        <button class="btn btn-primary w-100">Actualizar contraseña</button>
+    </form>
+</div>
+{% endblock %}

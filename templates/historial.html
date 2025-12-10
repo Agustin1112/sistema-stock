@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container py-4">
+    <h2 class="text-center mb-4">📜 Historial de Movimientos</h2>
+
+    <table class="table table-dark table-striped">
+        <thead>
+            <tr>
+                <th>Producto</th>
+                <th>Tipo</th>
+                <th>Cantidad</th>
+                <th>Fecha</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for mov in movimientos %}
+            <tr>
+                <td>{{ mov.producto }}</td>
+                <td>{{ mov.tipo }}</td>
+                <td>{{ mov.cantidad }}</td>
+                <td>{{ mov.fecha.strftime("%d/%m/%Y %H:%M") }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
