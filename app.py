@@ -6,6 +6,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta
 from sqlalchemy import text
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
+from functools import wraps
 import os
 import smtplib
 from email.message import EmailMessage
@@ -15,9 +16,9 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'supersecretkey')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///stock.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-
 MAX_FAILED_ATTEMPTS = 5
 LOCK_MINUTES = 15
+CATS_PER_PAGE = 10
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
@@ -31,7 +32,6 @@ class User(db.Model, UserMixin):
     password_hash = db.Column(db.String(200), nullable=False)
     role = db.Column(db.String(20), nullable=False, default="viewer")
 
-    
     failed_attempts = db.Column(db.Integer, default=0, nullable=False)
     locked_until = db.Column(db.DateTime, nullable=True)
 
@@ -41,7 +41,6 @@ class User(db.Model, UserMixin):
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
-   
     def is_admin(self):
         return self.role == "admin"
 
@@ -55,7 +54,14 @@ class User(db.Model, UserMixin):
 class Categoria(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(150), unique=True, nullable=False)
-    tipo = db.Column(db.String(50), default="general", nullable=False)
+    tipo = db.Column(db.String(50), default="informatica", nullable=False)
+    icon = db.Column(db.String(200), nullable=True)
+    padre_id = db.Column(db.Integer, db.ForeignKey('categoria.id'), nullable=True)
+
+    
+    padre = db.relationship('Categoria', remote_side=[id], backref='hijos', uselist=False)
+
+    productos = db.relationship('Producto', backref='categoria', lazy='dynamic')
 
 
 class Producto(db.Model):
@@ -63,10 +69,11 @@ class Producto(db.Model):
     nombre = db.Column(db.String(150), nullable=False)
 
     categoria_id = db.Column(db.Integer, db.ForeignKey('categoria.id'), nullable=False)
-    categoria = db.relationship('Categoria', backref='productos')
 
     stock = db.Column(db.Integer, default=0, nullable=False)
     minimo = db.Column(db.Integer, default=0, nullable=False)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     @property
     def cantidad(self):
@@ -83,15 +90,12 @@ class Producto(db.Model):
 class Movimiento(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     producto_id = db.Column(db.Integer, db.ForeignKey('producto.id'), nullable=False)
-    tipo = db.Column(db.String(20), nullable=False)
-    cantidad = db.Column(db.Integer, nullable=False)
-    usuario = db.Column(db.String(150))
-    fecha = db.Column(db.DateTime, default=datetime.utcnow)
     producto = db.relationship('Producto')
 
-    def __repr__(self):
-        prod_name = self.producto.nombre if self.producto else self.producto_id
-        return f"<Mov {self.tipo} {self.cantidad} de {prod_name} por {self.usuario}>"
+    tipo = db.Column(db.String(20))
+    cantidad = db.Column(db.Integer)
+    usuario = db.Column(db.String(150))
+    fecha = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class Log(db.Model):
@@ -102,11 +106,7 @@ class Log(db.Model):
 
 
 def registrar_log(texto):
-    if current_user.is_authenticated:
-        usuario = current_user.username
-    else:
-        usuario = "desconocido"
-
+    usuario = current_user.username if current_user.is_authenticated else "desconocido"
     log = Log(usuario=usuario, accion=texto)
     db.session.add(log)
     db.session.commit()
@@ -114,7 +114,6 @@ def registrar_log(texto):
 
 @login_manager.user_loader
 def load_user(user_id):
-    
     return User.query.get(int(user_id))
 
 
@@ -123,13 +122,15 @@ def crear_datos_iniciales():
     with app.app_context():
         db.create_all()
 
-       
+        
         try:
             conn = db.engine.connect()
             res = conn.execute(text("PRAGMA table_info(categoria)")).fetchall()
-            column_names = [r[1] for r in res]
-            if 'tipo' not in column_names:
-                conn.execute(text("ALTER TABLE categoria ADD COLUMN tipo VARCHAR DEFAULT 'general'"))
+            colnames = [r[1] for r in res]
+            if 'icon' not in colnames:
+                conn.execute(text("ALTER TABLE categoria ADD COLUMN icon VARCHAR"))
+            if 'padre_id' not in colnames:
+                conn.execute(text("ALTER TABLE categoria ADD COLUMN padre_id INTEGER"))
             conn.close()
         except Exception:
             pass
@@ -143,20 +144,21 @@ def crear_datos_iniciales():
 
         
         if Categoria.query.count() == 0:
-            categorias_info = [
-                "Monitores", "Teclados", "Notebooks",
-                "Computadoras", "Accesorios", "Impresoras"
+            inicial = [
+                ("Monitores", None),
+                ("Teclados", None),
+                ("Notebooks", None),
+                ("Computadoras", None),
+                ("Accesorios", None),
+                ("Impresoras", None),
             ]
-            for c in categorias_info:
-                db.session.add(Categoria(nombre=c, tipo="informatica"))
+            for nombre, padre in inicial:
+                db.session.add(Categoria(nombre=nombre, tipo="informatica"))
             db.session.commit()
 
 
 crear_datos_iniciales()
 
-
-
-from functools import wraps
 
 
 def roles_required(*roles):
@@ -183,51 +185,44 @@ def get_serializer():
     return URLSafeTimedSerializer(app.config['SECRET_KEY'])
 
 
-def generate_reset_token(user_email):
+def generate_reset_token(user_identifier):
     s = get_serializer()
-    return s.dumps(user_email, salt='password-reset-salt')
+    return s.dumps(user_identifier, salt='password-reset-salt')
 
 
 def verify_reset_token(token, max_age=3600):
     s = get_serializer()
     try:
-        email = s.loads(token, salt='password-reset-salt', max_age=max_age)
-        return email
-    except SignatureExpired:
-        return None
-    except BadSignature:
+        val = s.loads(token, salt='password-reset-salt', max_age=max_age)
+        return val
+    except (SignatureExpired, BadSignature):
         return None
 
 
-def send_reset_email(to_email, reset_link):
-    """
-    Intenta enviar el email usando variables de entorno SMTP_*
-    Si no están configuradas, imprime el enlace en consola (modo dev).
-    """
+def send_reset_email(to, link):
     smtp_host = os.environ.get('SMTP_HOST')
     smtp_port = int(os.environ.get('SMTP_PORT', 0)) if os.environ.get('SMTP_PORT') else None
     smtp_user = os.environ.get('SMTP_USER')
     smtp_pass = os.environ.get('SMTP_PASS')
     email_from = os.environ.get('EMAIL_FROM', 'no-reply@example.com')
 
-    message = EmailMessage()
-    message['Subject'] = 'Recuperación de contraseña - Sistema de Stock'
-    message['From'] = email_from
-    message['To'] = to_email
-    message.set_content(f"Hola,\n\nHacé clic en el enlace para cambiar tu contraseña:\n\n{reset_link}\n\n"
-                        "Si no pediste esto, ignorá este mensaje.")
+    msg = EmailMessage()
+    msg['Subject'] = 'Recuperación de contraseña - Sistema de Stock'
+    msg['From'] = email_from
+    msg['To'] = to
+    msg.set_content(f"Recuperación de contraseña:\n\n{link}\n\nSi no pediste esto, ignorá.")
 
     if smtp_host and smtp_port and smtp_user and smtp_pass:
         try:
             with smtplib.SMTP_SSL(smtp_host, smtp_port) as smtp:
                 smtp.login(smtp_user, smtp_pass)
-                smtp.send_message(message)
-            app.logger.info("Email de recuperación enviado a %s", to_email)
+                smtp.send_message(msg)
+            app.logger.info("Email enviado a %s", to)
             return True
         except Exception as e:
             app.logger.error("Error enviando email: %s", e)
-      
-    print(f"[DEV] Reset link for {to_email}: {reset_link}")
+
+    print(f"[DEV] Reset link for {to}: {link}")
     return False
 
 
@@ -271,18 +266,10 @@ def index():
         query = query.filter(Producto.stock > Producto.minimo)
 
     productos = query.all()
-    categorias = Categoria.query.filter_by(tipo="informatica").order_by(Categoria.nombre).all()
+    categorias = Categoria.query.filter_by(tipo="informatica", padre_id=None).order_by(Categoria.nombre).all()
 
-    return render_template(
-        'index.html',
-        productos=productos,
-        categorias=categorias,
-        q_name=q_name,
-        q_cat=q_cat,
-        q_min=q_min,
-        q_max=q_max,
-        q_state=q_state
-    )
+    return render_template('index.html', productos=productos, categorias=categorias,
+                           q_name=q_name, q_cat=q_cat, q_min=q_min, q_max=q_max, q_state=q_state)
 
 
 
@@ -293,28 +280,23 @@ def login():
         password = request.form.get('password', '')
 
         user = User.query.filter_by(username=username).first()
-
         if not user:
             flash("Usuario o contraseña incorrectos.", "danger")
             return redirect(url_for('login'))
 
-        
         if user.locked_until and datetime.utcnow() < user.locked_until:
             remaining = (user.locked_until - datetime.utcnow()).seconds // 60 + 1
             flash(f"Cuenta bloqueada por intentos fallidos. Probá en {remaining} minutos.", "danger")
             return redirect(url_for('login'))
 
         if user.check_password(password):
-            
             user.failed_attempts = 0
             user.locked_until = None
             db.session.commit()
-
             login_user(user)
             registrar_log("Inicio de sesión")
             return redirect(url_for('index'))
         else:
-            
             user.failed_attempts = (user.failed_attempts or 0) + 1
             if user.failed_attempts >= MAX_FAILED_ATTEMPTS:
                 user.locked_until = datetime.utcnow() + timedelta(minutes=LOCK_MINUTES)
@@ -342,47 +324,41 @@ def reset_request():
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         user = User.query.filter_by(username=username).first()
+
         if not user:
-            flash("Si el usuario existe, se enviará un email con instrucciones (mensaje genérico).", "info")
+            flash("Si el usuario existe, se enviará un email con instrucciones.", "info")
             return redirect(url_for('login'))
 
         token = generate_reset_token(user.username)
-        reset_link = url_for('reset_password', token=token, _external=True)
-        send_reset_email(user.username, reset_link)
-
-        registrar_log(f"Solicitud de recuperación para {user.username}")
+        link = url_for('reset_password', token=token, _external=True)
+        send_reset_email(user.username, link)
+        registrar_log(f"Solicitud recuperación: {user.username}")
         flash("Si el usuario existe, se enviará un email con instrucciones.", "info")
         return redirect(url_for('login'))
-
     return render_template('reset_request.html')
 
 
 @app.route('/reset/<token>', methods=['GET', 'POST'])
 def reset_password(token):
-    username = verify_reset_token(token, max_age=3600)  # 1 hora
+    username = verify_reset_token(token, max_age=3600)
     if not username:
         flash("Token inválido o expirado.", "danger")
         return redirect(url_for('reset_request'))
 
     user = User.query.filter_by(username=username).first_or_404()
-
     if request.method == 'POST':
         nueva = request.form.get('password')
         confirmar = request.form.get('confirm')
         if not nueva or nueva != confirmar:
             flash("Contraseñas no coinciden o vacías.", "danger")
             return redirect(url_for('reset_password', token=token))
-
         user.set_password(nueva)
-        
         user.failed_attempts = 0
         user.locked_until = None
         db.session.commit()
-
-        registrar_log(f"Contraseña reiniciada para {user.username}")
+        registrar_log(f"Contraseña reiniciada: {user.username}")
         flash("Contraseña cambiada correctamente. Hacé login.", "success")
         return redirect(url_for('login'))
-
     return render_template('reset_password.html', username=username)
 
 
@@ -394,22 +370,17 @@ def cambiar_contrasena():
         actual = request.form['actual']
         nueva = request.form['nueva']
         confirmar = request.form['confirmar']
-
         if not current_user.check_password(actual):
             flash("La contraseña actual no es correcta.", "danger")
             return redirect(url_for('cambiar_contrasena'))
-
         if nueva != confirmar:
             flash("Las contraseñas no coinciden.", "danger")
             return redirect(url_for('cambiar_contrasena'))
-
         current_user.set_password(nueva)
         db.session.commit()
-
         registrar_log("Cambió su contraseña")
         flash("Contraseña cambiada correctamente.", "success")
         return redirect(url_for('index'))
-
     return render_template('cambiar_contrasena.html')
 
 
@@ -421,25 +392,19 @@ def usuarios():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
-        role = request.form.get('role')
-
+        role = request.form.get('role') or 'viewer'
         if not username or not password:
             flash("Faltan datos", "danger")
             return redirect(url_for('usuarios'))
-
         if User.query.filter_by(username=username).first():
             flash("El usuario ya existe", "warning")
             return redirect(url_for('usuarios'))
-
         nuevo = User(username=username, role=role)
         nuevo.set_password(password)
-
         db.session.add(nuevo)
         db.session.commit()
-
         flash("Usuario creado correctamente", "success")
         return redirect(url_for('usuarios'))
-
     lista = User.query.all()
     return render_template('usuarios.html', usuarios=lista)
 
@@ -473,66 +438,108 @@ def eliminar_usuario(user_id):
 
 
 
-@app.route('/categorias')
+@app.route('/categorias', methods=['GET', 'POST'])
 @login_required
 def categorias():
-    categorias = Categoria.query.filter_by(tipo="informatica").order_by(Categoria.nombre).all()
-    return render_template('categorias.html', categorias=categorias)
-
-
-@app.route('/agregar_categoria', methods=['POST'])
-@login_required
-@roles_required('admin')
-def agregar_categoria():
-    nombre = request.form['nombre'].strip()
-    if not nombre:
-        flash("El nombre no puede estar vacío.", "danger")
+    
+    if request.method == 'POST':
+        if not current_user.is_admin():
+            return "No autorizado", 403
+        nombre = request.form.get('nombre', '').strip()
+        icon = request.form.get('icon', '').strip() or None
+        padre_id = request.form.get('padre_id') or None
+        if not nombre:
+            flash("El nombre no puede estar vacío.", "danger")
+            return redirect(url_for('categorias'))
+        if Categoria.query.filter_by(nombre=nombre).first():
+            flash("Ya existe esa categoría.", "warning")
+            return redirect(url_for('categorias'))
+        nueva = Categoria(nombre=nombre, tipo="informatica", icon=icon)
+        if padre_id:
+            try:
+                pid = int(padre_id)
+                padre = Categoria.query.get(pid)
+                if padre:
+                    nueva.padre = padre
+            except Exception:
+                pass
+        db.session.add(nueva)
+        db.session.commit()
+        registrar_log(f"Agregó categoría: {nombre}")
+        flash("Categoría agregada correctamente.", "success")
         return redirect(url_for('categorias'))
-    if Categoria.query.filter_by(nombre=nombre).first():
-        flash("Ya existe esa categoría.", "warning")
-        return redirect(url_for('categorias'))
-    nueva = Categoria(nombre=nombre, tipo="informatica")
-    db.session.add(nueva)
-    db.session.commit()
-    registrar_log(f"Agregó categoría: {nombre}")
-    flash("Categoría agregada correctamente.", "success")
-    return redirect(url_for('categorias'))
+
+    
+    try:
+        page = int(request.args.get('page', 1))
+    except ValueError:
+        page = 1
+
+    query = Categoria.query.order_by(Categoria.nombre.asc())
+    pagination = query.paginate(page=page, per_page=CATS_PER_PAGE, error_out=False)
+    categorias_page = pagination.items
+
+    fa_choices = [
+        "bi bi-box", "bi bi-keyboard", "bi bi-laptop", "bi bi-desktop",
+        "bi bi-headphones", "bi bi-printer", "bi bi-cpu", "bi bi-plug"
+    ]
+
+    return render_template('categorias.html',
+                           categorias=categorias_page,
+                           pagination=pagination,
+                           fa_choices=fa_choices)
 
 
-@app.route('/editar_categoria/<int:id>', methods=['POST'])
+@app.route('/categorias/<int:id>/editar', methods=['POST'])
 @login_required
 @roles_required('admin')
 def editar_categoria(id):
-    nuevo_nombre = request.form['nuevo_nombre'].strip()
+    categoria = Categoria.query.get_or_404(id)
+    nuevo_nombre = request.form.get('nombre', '').strip()
+    nuevo_icon = request.form.get('icon', '').strip() or None
+    nuevo_padre_id = request.form.get('padre_id') or None
     if not nuevo_nombre:
         flash("El nombre no puede estar vacío.", "danger")
         return redirect(url_for('categorias'))
-    categoria = Categoria.query.get(id)
-    if not categoria:
-        flash("La categoría no existe.", "danger")
-        return redirect(url_for('categorias'))
-    if Categoria.query.filter_by(nombre=nuevo_nombre).first():
-        flash("Ya existe esa categoría.", "warning")
+    existente = Categoria.query.filter(Categoria.nombre == nuevo_nombre, Categoria.id != id).first()
+    if existente:
+        flash("Ya existe otra categoría con ese nombre.", "warning")
         return redirect(url_for('categorias'))
     categoria.nombre = nuevo_nombre
-    categoria.tipo = "informatica"
+    categoria.icon = nuevo_icon
+    
+    if nuevo_padre_id:
+        pid = int(nuevo_padre_id)
+        if pid == categoria.id:
+            categoria.padre = None
+        else:
+            padre = Categoria.query.get(pid)
+            
+            if padre:
+                categoria.padre = padre
+    else:
+        categoria.padre = None
+
     db.session.commit()
-    registrar_log(f"Editó categoría ID {id}")
-    flash("Categoría editada.", "success")
+    registrar_log(f"Editó categoría ID {id} → {nuevo_nombre}")
+    flash("Categoría editada correctamente.", "success")
     return redirect(url_for('categorias'))
 
 
-@app.route('/eliminar_categoria/<int:id>')
+@app.route('/categorias/<int:id>/eliminar')
 @login_required
 @roles_required('admin')
 def eliminar_categoria(id):
-    categoria = Categoria.query.get(id)
-    if not categoria:
-        flash("La categoría no existe.", "danger")
+    categoria = Categoria.query.get_or_404(id)
+    
+    if categoria.productos.count() > 0:
+        flash("No se puede eliminar: contiene productos.", "warning")
         return redirect(url_for('categorias'))
-    if categoria.productos:
-        flash("No se puede eliminar: tiene productos.", "warning")
+    
+    if len(categoria.hijos) > 0:
+        flash("No se puede eliminar: tiene subcategorías.", "warning")
         return redirect(url_for('categorias'))
+
     db.session.delete(categoria)
     db.session.commit()
     registrar_log(f"Eliminó categoría: {categoria.nombre}")
@@ -541,37 +548,29 @@ def eliminar_categoria(id):
 
 
 
-@app.route('/agregar_producto', methods=['POST'])
+@app.route('/agregar_producto', methods=['GET', 'POST'])
 @login_required
 def agregar_producto():
     if not current_user.is_staff():
         return "No autorizado", 403
+    if request.method == 'GET':
+        categorias = Categoria.query.filter_by(tipo="informatica").order_by(Categoria.nombre).all()
+        return render_template('agregar.html', categorias=categorias)
 
     nombre = request.form['nombre']
     cantidad = int(request.form['cantidad'])
     minimo = int(request.form['minimo'])
     categoria_id = int(request.form['categoria'])
 
-    nuevo = Producto(
-        nombre=nombre,
-        stock=cantidad,
-        minimo=minimo,
-        categoria_id=categoria_id
-    )
-
+    nuevo = Producto(nombre=nombre, stock=cantidad, minimo=minimo, categoria_id=categoria_id)
     db.session.add(nuevo)
     db.session.commit()
-    mov = Movimiento(
-        producto_id=nuevo.id,
-        tipo="entrada",
-        cantidad=cantidad,
-        usuario=current_user.username
-    )
+
+    mov = Movimiento(producto_id=nuevo.id, tipo="entrada", cantidad=cantidad, usuario=current_user.username)
     db.session.add(mov)
     db.session.commit()
 
     registrar_log(f"{current_user.username} agregó producto: {nombre}")
-
     return redirect(url_for('index'))
 
 
@@ -579,7 +578,6 @@ def agregar_producto():
 @login_required
 def editar_producto(id):
     prod = Producto.query.get_or_404(id)
-
     if not current_user.is_staff():
         return "No autorizado", 403
 
@@ -588,88 +586,44 @@ def editar_producto(id):
     minimo = int(request.form['minimo'])
     categoria_id = int(request.form['categoria'])
 
-   
     stock_anterior = prod.stock
 
-    
-    hubo_cambio_extra = (
-        nombre != prod.nombre or
-        minimo != prod.minimo or
-        categoria_id != prod.categoria_id
-    )
-
-    
     prod.nombre = nombre
     prod.stock = stock_nuevo
     prod.minimo = minimo
     prod.categoria_id = categoria_id
 
-   
     if stock_nuevo != stock_anterior:
         tipo = "entrada" if stock_nuevo > stock_anterior else "salida"
         diferencia = abs(stock_nuevo - stock_anterior)
-
-        mov = Movimiento(
-            producto_id=prod.id,
-            tipo=tipo,
-            cantidad=diferencia,
-            usuario=current_user.username
-        )
-        db.session.add(mov)
-
-    
-    elif hubo_cambio_extra:
-        mov = Movimiento(
-            producto_id=prod.id,
-            tipo="modificacion",
-            cantidad=0,
-            usuario=current_user.username
-        )
+        mov = Movimiento(producto_id=prod.id, tipo=tipo, cantidad=diferencia, usuario=current_user.username)
         db.session.add(mov)
 
     db.session.commit()
-
-    registrar_log(
-        f"{current_user.username} editó producto {prod.nombre} (stock {stock_anterior} → {stock_nuevo})"
-    )
-
+    registrar_log(f"{current_user.username} editó producto {prod.nombre} (stock {stock_anterior} → {stock_nuevo})")
+    flash("Producto editado.", "success")
     return redirect(url_for('index'))
-
 
 
 @app.route('/eliminar_producto/<int:id>')
 @login_required
 @roles_required('admin')
 def eliminar_producto(id):
-    p = Producto.query.get(id)
-    if not p:
-        flash("Producto no encontrado.", "danger")
-        return redirect(url_for('index'))
-
-    
-    mov = Movimiento(
-        producto_id=p.id,
-        tipo="eliminacion",
-        cantidad=0,
-        usuario=current_user.username
-    )
-    db.session.add(mov)
-
+    p = Producto.query.get_or_404(id)
+    if p.stock and p.stock > 0:
+        mov = Movimiento(producto_id=p.id, tipo="salida", cantidad=p.stock, usuario=current_user.username)
+        db.session.add(mov)
     registrar_log(f"Eliminó producto: {p.nombre}")
-    
     db.session.delete(p)
     db.session.commit()
-
     return redirect(url_for('index'))
-
-
 
 
 @app.route('/movimiento/<int:id>', methods=['POST'])
 @login_required
 @roles_required('admin', 'staff')
 def movimiento(id):
-    prod = Producto.query.get(id)
+    prod = Producto.query.get_or_404(id)
     tipo = request.form['tipo']
     cant = int(request.form['cantidad'])
     if tipo == "salida" and prod.stock < cant:
@@ -679,7 +633,7 @@ def movimiento(id):
         prod.stock += cant
     else:
         prod.stock -= cant
-    mov = Movimiento(producto_id=id, tipo=tipo, cantidad=cant, usuario=current_user.username)
+    mov = Movimiento(producto_id=prod.id, tipo=tipo, cantidad=cant, usuario=current_user.username)
     db.session.add(mov)
     db.session.commit()
     registrar_log(f"Movimiento: {tipo} {cant} de {prod.nombre}")
@@ -690,60 +644,10 @@ def movimiento(id):
 @app.route('/historial')
 @login_required
 def historial():
-
-    
-    query = Movimiento.query.join(Producto, isouter=True)
-
-    
-    producto = request.args.get("producto", "")
-    tipo = request.args.get("tipo", "")
-    usuario = request.args.get("usuario", "")
-    desde = request.args.get("desde", "")
-    hasta = request.args.get("hasta", "")
-
-    
-    if producto:
-        query = query.filter(Producto.nombre.ilike(f"%{producto}%"))
-
-    
-    if tipo:
-        query = query.filter(Movimiento.tipo == tipo)
-
-   
-    if usuario:
-        query = query.filter(Movimiento.usuario.ilike(f"%{usuario}%"))
-
-    
-    if desde:
-        try:
-            fecha_desde = datetime.strptime(desde, "%Y-%m-%d")
-            query = query.filter(Movimiento.fecha >= fecha_desde)
-        except:
-            pass
-
-    if hasta:
-        try:
-            fecha_hasta = datetime.strptime(hasta, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
-            query = query.filter(Movimiento.fecha <= fecha_hasta)
-        except:
-            pass
-
-    
     page = request.args.get('page', 1, type=int)
-    per_page = 20
-
-    pagination = query.order_by(Movimiento.fecha.desc()).paginate(page=page, per_page=per_page)
-
-    movimientos = pagination.items
-
-    return render_template(
-        'historial.html',
-        movimientos=movimientos,
-        pagination=pagination,
-        request_args=request.args
-    )
-
-
+    pagination = Movimiento.query.order_by(Movimiento.fecha.desc()).paginate(page=page, per_page=10)
+    movs = pagination.items
+    return render_template('historial.html', movimientos=movs, pagination=pagination)
 
 
 @app.route('/logs')
