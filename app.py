@@ -438,10 +438,10 @@ def eliminar_usuario(user_id):
 
 
 
+
 @app.route('/categorias', methods=['GET', 'POST'])
 @login_required
 def categorias():
-    
     if request.method == 'POST':
         if not current_user.is_admin():
             return "No autorizado", 403
@@ -470,12 +470,18 @@ def categorias():
         return redirect(url_for('categorias'))
 
     
+    q = request.args.get('q', '').strip()
     try:
         page = int(request.args.get('page', 1))
     except ValueError:
         page = 1
 
-    query = Categoria.query.order_by(Categoria.nombre.asc())
+    query = Categoria.query
+    if q:
+        
+        query = query.filter(Categoria.nombre.ilike(f"%{q}%"))
+
+    query = query.order_by(Categoria.nombre.asc())
     pagination = query.paginate(page=page, per_page=CATS_PER_PAGE, error_out=False)
     categorias_page = pagination.items
 
@@ -487,7 +493,9 @@ def categorias():
     return render_template('categorias.html',
                            categorias=categorias_page,
                            pagination=pagination,
-                           fa_choices=fa_choices)
+                           fa_choices=fa_choices,
+                           q=q)
+
 
 
 @app.route('/categorias/<int:id>/editar', methods=['POST'])
@@ -641,13 +649,27 @@ def movimiento(id):
 
 
 
+
 @app.route('/historial')
 @login_required
 def historial():
+    q = request.args.get('q', '').strip()
     page = request.args.get('page', 1, type=int)
-    pagination = Movimiento.query.order_by(Movimiento.fecha.desc()).paginate(page=page, per_page=10)
+
+    query = Movimiento.query.join(Producto)
+
+    if q:
+        
+        query = query.filter(
+            (Producto.nombre.ilike(f"%{q}%")) |
+            (Movimiento.usuario.ilike(f"%{q}%"))
+        )
+
+    pagination = query.order_by(Movimiento.fecha.desc()).paginate(page=page, per_page=10, error_out=False)
     movs = pagination.items
-    return render_template('historial.html', movimientos=movs, pagination=pagination)
+
+    return render_template('historial.html', movimientos=movs, pagination=pagination, q=q)
+
 
 
 @app.route('/logs')

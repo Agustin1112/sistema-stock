@@ -2,151 +2,149 @@
 {% block title %}Categorías{% endblock %}
 
 {% block content %}
-
 <h2 class="mb-4"><i class="bi bi-tags"></i> Categorías</h2>
 
 <div class="card shadow-sm">
-    <div class="card-body">
+  <div class="card-body">
 
-        {% if current_user.is_admin() %}
-        <form method="POST" action="{{ url_for('categorias') }}" class="row g-2 align-items-end">
+    {% if current_user.is_admin() %}
+    <form method="POST" action="{{ url_for('categorias') }}" class="row g-2 align-items-end mb-3">
+      <div class="col-md-5">
+        <label class="form-label">Nombre de categoría</label>
+        <input type="text" name="nombre" class="form-control" required>
+      </div>
 
-            <div class="col-md-6">
-                <label class="form-label">Nombre de categoría</label>
-                <input type="text" name="nombre" class="form-control" required>
-            </div>
+      <div class="col-md-5">
+        <label class="form-label">Categoría padre (opcional)</label>
+        <select name="padre_id" class="form-select">
+          <option value="">Sin padre</option>
+          {% for c in categorias %}
+            <option value="{{ c.id }}">{{ c.nombre }}</option>
+          {% endfor %}
+        </select>
+      </div>
 
-            <div class="col-md-3">
-                <label class="form-label">Categoría padre (opcional)</label>
-                <select name="padre_id" class="form-select">
+      <div class="col-md-2">
+        <button class="btn btn-primary w-100">
+          <i class="bi bi-plus-circle"></i> Agregar
+        </button>
+      </div>
+    </form>
+    {% endif %}
+
+   
+    <form method="GET" class="mb-3 row g-2">
+      <div class="col-md-8">
+        <input type="text" name="q" class="form-control" placeholder="Buscar categoría..." value="{{ q }}">
+      </div>
+      <div class="col-md-4 text-end">
+        <button class="btn btn-secondary"><i class="bi bi-search"></i> Buscar</button>
+        <a href="{{ url_for('categorias') }}" class="btn btn-outline-secondary">Limpiar</a>
+      </div>
+    </form>
+
+    <hr>
+
+    <h5 class="mb-3">Listado de Categorías</h5>
+
+    <ul class="list-group">
+      {% for c in categorias %}
+      <li class="list-group-item d-flex justify-content-between align-items-center">
+
+        <div>
+          <strong>{{ c.nombre }}</strong>
+
+          {% if c.padre %}
+            <span class="badge bg-secondary ms-2">Sub de {{ c.padre.nombre }}</span>
+          {% endif %}
+        </div>
+
+        <div>
+          {% if current_user.is_admin() %}
+          
+          
+          <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editCat{{ c.id }}">
+            <i class="bi bi-pencil"></i>
+          </button>
+
+         
+          <a href="{{ url_for('eliminar_categoria', id=c.id) }}" 
+             class="btn btn-danger btn-sm"
+             onclick="return confirm('¿Eliminar categoría {{ c.nombre }}?');">
+            <i class="bi bi-trash"></i> 
+          </a>
+
+          {% endif %}
+        </div>
+
+      </li>
+
+      
+      <div class="modal fade" id="editCat{{ c.id }}" tabindex="-1">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <form method="POST" action="{{ url_for('editar_categoria', id=c.id) }}">
+              <div class="modal-header">
+                <h5 class="modal-title">Editar categoría</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body">
+                <div class="mb-2">
+                  <label class="form-label">Nombre</label>
+                  <input class="form-control" name="nombre" value="{{ c.nombre }}" required>
+                </div>
+                <div class="mb-2">
+                  <label class="form-label">Padre (opcional)</label>
+                  <select name="padre_id" class="form-select">
                     <option value="">Sin padre</option>
-                    {% for c in categorias %}
-                        <option value="{{ c.id }}">{{ c.nombre }}</option>
+                    {% for p in categorias %}
+                      <option value="{{ p.id }}" {% if c.padre and c.padre.id == p.id %}selected{% endif %}>
+                        {{ p.nombre }}
+                      </option>
                     {% endfor %}
-                </select>
-            </div>
-
-            <div class="col-md-2">
-                <button class="btn btn-primary w-100">
-                    <i class="bi bi-plus-circle"></i> Agregar
-                </button>
-            </div>
-
-        </form>
-        {% endif %}
-
-        <hr>
-
-        <h5 class="mb-3">Listado de Categorías</h5>
-
-        <ul class="list-group mb-3">
-            {% for c in categorias %}
-            <li class="list-group-item d-flex justify-content-between align-items-center">
-
-                <div>
-                    <!-- icono opcional (si lo tuvieras en future) -->
-                    {% if c.icon %}
-                        <i class="{{ c.icon }} me-2"></i>
-                    {% endif %}
-
-                    <strong>{{ c.nombre }}</strong>
-
-                    {% if c.padre %}
-                        <span class="badge bg-secondary ms-2">
-                            Subcategoría de {{ c.padre.nombre }}
-                        </span>
-                    {% endif %}
-                </div>
-
-                <div class="d-flex gap-2">
-                    {% if current_user.is_admin() %}
-                    
-                    <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#editModal{{ c.id }}">
-                        <i class="bi bi-pencil"></i> Editar
-                    </button>
-
-                    <a href="{{ url_for('eliminar_categoria', id=c.id) }}"
-                       class="btn btn-danger btn-sm"
-                       onclick="return confirm('¿Eliminar categoría {{ c.nombre }}?');">
-                        <i class="bi bi-trash"></i> Eliminar
-                    </a>
-                    {% else %}
-                    <small class="text-muted">Solo lectura</small>
-                    {% endif %}
-                </div>
-            </li>
-
-            
-            <div class="modal fade" id="editModal{{ c.id }}" tabindex="-1">
-              <div class="modal-dialog">
-                <div class="modal-content">
-                  <form method="POST" action="{{ url_for('editar_categoria', id=c.id) }}">
-                    <div class="modal-header">
-                      <h5 class="modal-title">Editar categoría</h5>
-                      <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                      <div class="mb-2">
-                        <label class="form-label">Nombre</label>
-                        <input class="form-control" name="nombre" value="{{ c.nombre }}" required>
-                      </div>
-                      <div class="mb-2">
-                        <label class="form-label">Ícono (opcional)</label>
-                        <input class="form-control" name="icon" value="{{ c.icon or '' }}" placeholder="bi bi-box">
-                      </div>
-                      <div class="mb-2">
-                        <label class="form-label">Padre</label>
-                        <select name="padre_id" class="form-select">
-                          <option value="">Sin padre</option>
-                          {% for opt in categorias %}
-                            <option value="{{ opt.id }}" {% if c.padre and c.padre.id == opt.id %}selected{% endif %}>
-                              {{ opt.nombre }}
-                            </option>
-                          {% endfor %}
-                        </select>
-                      </div>
-                    </div>
-                    <div class="modal-footer">
-                      <button class="btn btn-primary" type="submit">Guardar</button>
-                    </div>
-                  </form>
+                  </select>
                 </div>
               </div>
-            </div>
+              <div class="modal-footer">
+                <button class="btn btn-primary" type="submit">Guardar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
 
-            {% endfor %}
-        </ul>
+      {% endfor %}
+    </ul>
 
-        
-        {% if pagination.pages > 1 %}
-        <nav aria-label="Page navigation">
-          <ul class="pagination">
-            {% if pagination.has_prev %}
-              <li class="page-item">
-                <a class="page-link" href="{{ url_for('categorias', page=pagination.prev_num) }}">«</a>
-              </li>
-            {% else %}
-              <li class="page-item disabled"><span class="page-link">«</span></li>
-            {% endif %}
-
-            {% for p in range(1, pagination.pages + 1) %}
-              <li class="page-item {% if p == pagination.page %}active{% endif %}">
-                <a class="page-link" href="{{ url_for('categorias', page=p) }}">{{ p }}</a>
-              </li>
-            {% endfor %}
-
-            {% if pagination.has_next %}
-              <li class="page-item">
-                <a class="page-link" href="{{ url_for('categorias', page=pagination.next_num) }}">»</a>
-              </li>
-            {% else %}
-              <li class="page-item disabled"><span class="page-link">»</span></li>
-            {% endif %}
-          </ul>
-        </nav>
+    
+    {% if pagination.pages > 1 %}
+    <nav class="mt-3">
+      <ul class="pagination">
+        {% if pagination.has_prev %}
+        <li class="page-item">
+          <a class="page-link" href="{{ url_for('categorias', page=pagination.prev_num, q=q) }}">Anterior</a>
+        </li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link">Anterior</span></li>
         {% endif %}
 
-    </div>
-</div>
+        {% for p in range(1, pagination.pages + 1) %}
+        <li class="page-item {% if p == pagination.page %}active{% endif %}">
+          <a class="page-link" href="{{ url_for('categorias', page=p, q=q) }}">{{ p }}</a>
+        </li>
+        {% endfor %}
 
+        {% if pagination.has_next %}
+        <li class="page-item">
+          <a class="page-link" href="{{ url_for('categorias', page=pagination.next_num, q=q) }}">Siguiente</a>
+        </li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link">Siguiente</span></li>
+        {% endif %}
+      </ul>
+    </nav>
+    {% endif %}
+
+  </div>
+</div>
 {% endblock %}
