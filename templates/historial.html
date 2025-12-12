@@ -1,27 +1,141 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 {% block content %}
-<div class="container py-4">
-    <h2 class="text-center mb-4">📜 Historial de Movimientos</h2>
 
-    <table class="table table-dark table-striped">
-        <thead>
-            <tr>
-                <th>Producto</th>
-                <th>Tipo</th>
-                <th>Cantidad</th>
-                <th>Fecha</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for mov in movimientos %}
-            <tr>
-                <td>{{ mov.producto }}</td>
-                <td>{{ mov.tipo }}</td>
-                <td>{{ mov.cantidad }}</td>
-                <td>{{ mov.fecha.strftime("%d/%m/%Y %H:%M") }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+<h2 class="mb-4">Historial de Movimientos</h2>
+
+<!-- =======================
+        FILTROS
+======================== -->
+<form method="GET" class="row g-3 mb-4">
+
+    <div class="col-md-3">
+        <label class="form-label">Producto</label>
+        <input type="text" name="producto"
+               value="{{ request.args.get('producto', '') }}"
+               class="form-control" placeholder="Nombre del producto">
+    </div>
+
+    <div class="col-md-2">
+        <label class="form-label">Tipo</label>
+        <select name="tipo" class="form-control">
+            <option value="">Todos</option>
+            <option value="entrada" {% if request.args.tipo == "entrada" %}selected{% endif %}>Entrada</option>
+            <option value="salida" {% if request.args.tipo == "salida" %}selected{% endif %}>Salida</option>
+        </select>
+    </div>
+
+    <div class="col-md-2">
+        <label class="form-label">Usuario</label>
+        <input type="text" name="usuario" placeholder="Nombre de usuario"
+               value="{{ request.args.get('usuario', '') }}"
+               class="form-control">
+    </div>
+
+    <div class="col-md-2">
+        <label class="form-label">Desde</label>
+        <input type="date" name="desde"
+               value="{{ request.args.get('desde', '') }}"
+               class="form-control">
+    </div>
+
+    <div class="col-md-2">
+        <label class="form-label">Hasta</label>
+        <input type="date" name="hasta"
+               value="{{ request.args.get('hasta', '') }}"
+               class="form-control">
+    </div>
+
+    <div class="col-md-1 d-flex align-items-end">
+        <button class="btn btn-primary w-100">Filtrar</button>
+    </div>
+
+</form>
+
+<!-- =======================
+        TABLA
+======================== -->
+<table class="table table-bordered table-striped shadow-sm">
+    <thead class="table-dark">
+        <tr>
+            <th>ID</th>
+            <th>Producto</th>
+            <th>Tipo</th>
+            <th>Cantidad</th>
+            <th>Usuario</th>
+            <th>Fecha</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for m in movimientos %}
+        <tr>
+            <td>{{ m.id }}</td>
+            <td>{{ m.producto.nombre if m.producto else "Eliminado" }}</td>
+
+            <td>
+                {% if m.tipo == "entrada" %}
+                    <span class="badge bg-success">Entrada</span>
+                {% else %}
+                    <span class="badge bg-danger">Salida</span>
+                {% endif %}
+            </td>
+
+            <td>{{ m.cantidad }}</td>
+            <td>{{ m.usuario if m.usuario else "N/A" }}</td>
+            <td>{{ m.fecha.strftime("%d/%m/%Y %H:%M") }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- =======================
+      PAGINACIÓN
+======================== -->
+<nav aria-label="Page navigation" class="mt-4">
+    <ul class="pagination justify-content-center">
+
+        <!-- Botón Anterior -->
+        {% if pagination.has_prev %}
+        <li class="page-item">
+            <a class="page-link"
+               href="?page={{ pagination.prev_num }}&{{ request_args.to_dict() | urlencode }}">
+               Anterior
+            </a>
+        </li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link">Anterior</span></li>
+        {% endif %}
+
+        <!-- Números -->
+        {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+            {% if p %}
+                {% if p == pagination.page %}
+                    <li class="page-item active"><span class="page-link">{{ p }}</span></li>
+                {% else %}
+                    <li class="page-item">
+                        <a class="page-link"
+                           href="?page={{ p }}&{{ request_args.to_dict() | urlencode }}">
+                           {{ p }}
+                        </a>
+                    </li>
+                {% endif %}
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">...</span></li>
+            {% endif %}
+        {% endfor %}
+
+        <!-- Botón Siguiente -->
+        {% if pagination.has_next %}
+        <li class="page-item">
+            <a class="page-link"
+               href="?page={{ pagination.next_num }}&{{ request_args.to_dict() | urlencode }}">
+               Siguiente
+            </a>
+        </li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link">Siguiente</span></li>
+        {% endif %}
+
+    </ul>
+</nav>
+
 {% endblock %}

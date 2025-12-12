@@ -1,23 +1,25 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 {% block content %}
 
-<h2 class="mb-4 text-center">📘 Registro de Actividades</h2>
+<h2 class="mb-4">Auditoría del Sistema</h2>
+<p class="text-muted">Registro completo de acciones realizadas en el sistema. Solo administradores.</p>
 
-<table class="table table-dark table-striped">
-    <thead>
+<table class="table table-striped table-hover table-bordered">
+    <thead class="table-dark">
         <tr>
+            <th>ID</th>
             <th>Usuario</th>
             <th>Acción</th>
             <th>Fecha</th>
         </tr>
     </thead>
-
     <tbody>
-        {% for log in logs %}
+        {% for l in logs %}
         <tr>
-            <td>{{ log.usuario }}</td>
-            <td>{{ log.accion }}</td>
-            <td>{{ log.fecha.strftime("%d/%m/%Y %H:%M") }}</td>
+            <td>{{ l.id }}</td>
+            <td>{{ l.usuario }}</td>
+            <td>{{ l.accion }}</td>
+            <td>{{ l.fecha.strftime("%d/%m/%Y %H:%M") }}</td>
         </tr>
         {% endfor %}
     </tbody>

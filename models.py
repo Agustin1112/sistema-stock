@@ -83,7 +83,7 @@ class Movimiento(db.Model):
     producto_id = db.Column(db.Integer, db.ForeignKey("producto.id"), nullable=False)
     producto = db.relationship("Producto")
 
-    tipo = db.Column(db.String(10), nullable=False)
+    tipo = db.Column(db.String(20), nullable=False)
     cantidad = db.Column(db.Integer, nullable=False)
 
     usuario = db.Column(db.String(120))
@@ -91,3 +91,4 @@ class Movimiento(db.Model):
 
     def __repr__(self):
         return f"<Mov {self.tipo} {self.cantidad} de {self.producto.nombre}>"
+
