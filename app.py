@@ -445,56 +445,71 @@ def categorias():
     if request.method == 'POST':
         if not current_user.is_admin():
             return "No autorizado", 403
+
         nombre = request.form.get('nombre', '').strip()
-        icon = request.form.get('icon', '').strip() or None
         padre_id = request.form.get('padre_id') or None
+
         if not nombre:
             flash("El nombre no puede estar vacío.", "danger")
             return redirect(url_for('categorias'))
+
         if Categoria.query.filter_by(nombre=nombre).first():
             flash("Ya existe esa categoría.", "warning")
             return redirect(url_for('categorias'))
-        nueva = Categoria(nombre=nombre, tipo="informatica", icon=icon)
+
+        nueva = Categoria(nombre=nombre, tipo="informatica")
+
         if padre_id:
-            try:
-                pid = int(padre_id)
-                padre = Categoria.query.get(pid)
-                if padre:
-                    nueva.padre = padre
-            except Exception:
-                pass
+            padre = Categoria.query.get(int(padre_id))
+            if padre:
+                nueva.padre = padre
+
         db.session.add(nueva)
         db.session.commit()
+
         registrar_log(f"Agregó categoría: {nombre}")
         flash("Categoría agregada correctamente.", "success")
         return redirect(url_for('categorias'))
 
     
     q = request.args.get('q', '').strip()
+    order = request.args.get('order', 'asc')
+
     try:
         page = int(request.args.get('page', 1))
     except ValueError:
         page = 1
 
     query = Categoria.query
+
     if q:
-        
         query = query.filter(Categoria.nombre.ilike(f"%{q}%"))
 
-    query = query.order_by(Categoria.nombre.asc())
+    if order == 'desc':
+        query = query.order_by(Categoria.nombre.desc())
+    else:
+        query = query.order_by(Categoria.nombre.asc())
+
     pagination = query.paginate(page=page, per_page=CATS_PER_PAGE, error_out=False)
     categorias_page = pagination.items
 
-    fa_choices = [
-        "bi bi-box", "bi bi-keyboard", "bi bi-laptop", "bi bi-desktop",
-        "bi bi-headphones", "bi bi-printer", "bi bi-cpu", "bi bi-plug"
-    ]
+    
+    cantidades = {
+    c.id: c.productos.count()
+    for c in categorias_page
+}
 
-    return render_template('categorias.html',
-                           categorias=categorias_page,
-                           pagination=pagination,
-                           fa_choices=fa_choices,
-                           q=q)
+
+    return render_template(
+        'categorias.html',
+        categorias=categorias_page,
+        pagination=pagination,
+        q=q,
+        order=order,
+        cantidades=cantidades
+    )
+
+
 
 
 
@@ -536,23 +551,43 @@ def editar_categoria(id):
 
 @app.route('/categorias/<int:id>/eliminar')
 @login_required
-@roles_required('admin')
 def eliminar_categoria(id):
+    if not current_user.is_admin():
+        flash("No autorizado.", "danger")
+        return redirect(url_for('categorias'))
+
     categoria = Categoria.query.get_or_404(id)
+
     
     if categoria.productos.count() > 0:
-        flash("No se puede eliminar: contiene productos.", "warning")
+        flash(
+            f"No se puede eliminar '{categoria.nombre}' porque tiene productos asociados.",
+            "warning"
+        )
         return redirect(url_for('categorias'))
+
     
-    if len(categoria.hijos) > 0:
-        flash("No se puede eliminar: tiene subcategorías.", "warning")
+    if Categoria.query.filter_by(padre_id=categoria.id).count() > 0:
+        flash(
+            f"No se puede eliminar '{categoria.nombre}' porque tiene subcategorías.",
+            "warning"
+        )
         return redirect(url_for('categorias'))
 
     db.session.delete(categoria)
     db.session.commit()
+
     registrar_log(f"Eliminó categoría: {categoria.nombre}")
-    flash("Categoría eliminada.", "success")
+
+    flash("Categoría eliminada correctamente.", "success")
     return redirect(url_for('categorias'))
+
+
+@app.route('/productos')
+@login_required
+def productos():
+    productos = Producto.query.order_by(Producto.nombre.asc()).all()
+    return render_template('productos.html', productos=productos)
 
 
 
