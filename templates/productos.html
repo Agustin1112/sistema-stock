@@ -1,10 +1,22 @@
 {% extends "base.html" %}
-{% block title %}Productos{% endblock %}
+{% block title %}{{ titulo if titulo else "Productos" }}{% endblock %}
 
 {% block content %}
+
 <h2 class="mb-4">
-  <i class="bi bi-box-seam"></i> Productos
+  {% if critico == '1' %}
+    <i class="bi bi-exclamation-triangle text-danger"></i>
+  {% else %}
+    <i class="bi bi-box-seam"></i>
+  {% endif %}
+  {{ titulo if titulo else "Productos" }}
 </h2>
+
+{% if critico == '1' %}
+  <a href="{{ url_for('productos') }}" class="btn btn-outline-secondary mb-3">
+    <i class="bi bi-arrow-left"></i> Ver todos los productos
+  </a>
+{% endif %}
 
 <div class="card shadow-sm">
   <div class="card-body">
@@ -17,20 +29,20 @@
           <th>Stock</th>
           <th>Mínimo</th>
           {% if current_user.is_admin() %}
-          <th>Acciones</th>
+          <th class="text-center">Acciones</th>
           {% endif %}
         </tr>
       </thead>
 
       <tbody>
         {% for p in productos %}
-        <tr class="
+        <tr
           {% if p.stock == 0 %}
-            table-danger
+            class="table-danger"
           {% elif p.stock <= p.minimo %}
-            table-warning
+            class="table-warning"
           {% endif %}
-        ">
+        >
 
           <td>{{ p.nombre }}</td>
           <td>{{ p.categoria.nombre }}</td>
@@ -57,7 +69,7 @@
           <td>{{ p.minimo }}</td>
 
           {% if current_user.is_admin() %}
-          <td>
+          <td class="text-center">
             <a href="#" class="btn btn-sm btn-outline-primary">
               <i class="bi bi-pencil"></i>
             </a>
@@ -68,10 +80,17 @@
           {% endif %}
 
         </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" class="text-center text-muted">
+            No hay productos para mostrar
+          </td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
 
   </div>
 </div>
+
 {% endblock %}

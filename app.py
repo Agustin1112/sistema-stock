@@ -292,10 +292,7 @@ def login():
 
         if user.locked_until and datetime.utcnow() < user.locked_until:
             remaining = (user.locked_until - datetime.utcnow()).seconds // 60 + 1
-            flash(
-                f"Cuenta bloqueada por intentos fallidos. Probá en {remaining} minutos.",
-                "danger"
-            )
+            flash(f"Cuenta bloqueada por intentos fallidos. Probá en {remaining} minutos.", "danger")
             return redirect(url_for('login'))
 
         if user.check_password(password):
@@ -306,7 +303,6 @@ def login():
             login_user(user)
             registrar_log("Inicio de sesión")
 
-            # 🔥 REDIRECT INTELIGENTE
             return redirect_por_rol(user)
 
         else:
@@ -314,10 +310,7 @@ def login():
             if user.failed_attempts >= MAX_FAILED_ATTEMPTS:
                 user.locked_until = datetime.utcnow() + timedelta(minutes=LOCK_MINUTES)
                 registrar_log(f"Cuenta bloqueada: {user.username}")
-                flash(
-                    f"Demasiados intentos. Cuenta bloqueada {LOCK_MINUTES} minutos.",
-                    "danger"
-                )
+                flash(f"Demasiados intentos. Cuenta bloqueada {LOCK_MINUTES} minutos.", "danger")
             else:
                 flash("Usuario o contraseña incorrectos.", "danger")
 
@@ -325,6 +318,7 @@ def login():
             return redirect(url_for('login'))
 
     return render_template('login.html')
+
 
 
 @app.route('/logout')
@@ -603,8 +597,24 @@ def eliminar_categoria(id):
 @app.route('/productos')
 @login_required
 def productos():
-    productos = Producto.query.order_by(Producto.nombre.asc()).all()
-    return render_template('productos.html', productos=productos)
+    critico = request.args.get('critico')
+
+    if critico == '1':
+        productos = Producto.query.filter(
+            Producto.stock <= Producto.minimo
+        ).all()
+        titulo = "Productos con stock crítico"
+    else:
+        productos = Producto.query.all()
+        titulo = "Productos"
+
+    return render_template(
+        'productos.html',
+        productos=productos,
+        titulo=titulo,
+        critico=critico
+    )
+
 
 
 
@@ -734,7 +744,6 @@ def logs():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-
     if not current_user.is_staff():
         flash("No tenés permisos para acceder al dashboard.", "danger")
         return redirect(url_for('index'))
@@ -768,6 +777,7 @@ def dashboard():
         ultimos_movimientos=ultimos_movimientos,
         productos_criticos=productos_criticos
     )
+
 
 
 @app.route('/dashboard/data')
@@ -806,6 +816,15 @@ def dashboard_data():
     }
 
 
+@app.context_processor
+def stock_alertas():
+    if current_user.is_authenticated and current_user.is_staff():
+        cantidad = Producto.query.filter(
+            Producto.stock <= Producto.minimo
+        ).count()
+        return dict(stock_critico_count=cantidad)
+
+    return dict(stock_critico_count=0)
 
 
 if __name__ == "__main__":
