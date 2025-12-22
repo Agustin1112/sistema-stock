@@ -61,12 +61,15 @@
             <ul class="navbar-nav me-auto">
 
                 
-                <li class="nav-item">
-                    <a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}"
-                       href="{{ url_for('index') }}">
-                        <i class="bi bi-speedometer2"></i> Dashboard
-                    </a>
-                </li>
+                {% if current_user.is_authenticated and current_user.is_staff() %}
+<li class="nav-item">
+    <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}"
+       href="{{ url_for('dashboard') }}">
+        <i class="bi bi-speedometer2"></i> Dashboard
+    </a>
+</li>
+{% endif %}
+
 
                 
                 <li class="nav-item">

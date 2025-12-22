@@ -10,6 +10,9 @@ from functools import wraps
 import os
 import smtplib
 from email.message import EmailMessage
+from datetime import date
+from sqlalchemy import func
+
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'supersecretkey')
@@ -225,7 +228,10 @@ def send_reset_email(to, link):
     print(f"[DEV] Reset link for {to}: {link}")
     return False
 
-
+def redirect_por_rol(user):
+    if user.is_staff():
+        return redirect(url_for('dashboard'))
+    return redirect(url_for('index'))
 
 @app.route('/')
 @login_required
@@ -286,24 +292,35 @@ def login():
 
         if user.locked_until and datetime.utcnow() < user.locked_until:
             remaining = (user.locked_until - datetime.utcnow()).seconds // 60 + 1
-            flash(f"Cuenta bloqueada por intentos fallidos. Probá en {remaining} minutos.", "danger")
+            flash(
+                f"Cuenta bloqueada por intentos fallidos. Probá en {remaining} minutos.",
+                "danger"
+            )
             return redirect(url_for('login'))
 
         if user.check_password(password):
             user.failed_attempts = 0
             user.locked_until = None
             db.session.commit()
+
             login_user(user)
             registrar_log("Inicio de sesión")
-            return redirect(url_for('index'))
+
+            # 🔥 REDIRECT INTELIGENTE
+            return redirect_por_rol(user)
+
         else:
             user.failed_attempts = (user.failed_attempts or 0) + 1
             if user.failed_attempts >= MAX_FAILED_ATTEMPTS:
                 user.locked_until = datetime.utcnow() + timedelta(minutes=LOCK_MINUTES)
                 registrar_log(f"Cuenta bloqueada: {user.username}")
-                flash(f"Demasiados intentos. Cuenta bloqueada {LOCK_MINUTES} minutos.", "danger")
+                flash(
+                    f"Demasiados intentos. Cuenta bloqueada {LOCK_MINUTES} minutos.",
+                    "danger"
+                )
             else:
                 flash("Usuario o contraseña incorrectos.", "danger")
+
             db.session.commit()
             return redirect(url_for('login'))
 
@@ -713,6 +730,81 @@ def historial():
 def logs():
     registros = Log.query.order_by(Log.fecha.desc()).all()
     return render_template('logs.html', logs=registros)
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+
+    if not current_user.is_staff():
+        flash("No tenés permisos para acceder al dashboard.", "danger")
+        return redirect(url_for('index'))
+
+    total_productos = Producto.query.count()
+
+    productos_bajo_stock = Producto.query.filter(
+        Producto.stock <= Producto.minimo
+    ).count()
+
+    total_movimientos = Movimiento.query.count()
+
+    movimientos_hoy = Movimiento.query.filter(
+        func.date(Movimiento.fecha) == date.today()
+    ).count()
+
+    ultimos_movimientos = Movimiento.query.order_by(
+        Movimiento.fecha.desc()
+    ).limit(5).all()
+
+    productos_criticos = Producto.query.filter(
+        Producto.stock <= Producto.minimo
+    ).all()
+
+    return render_template(
+        'dashboard.html',
+        total_productos=total_productos,
+        productos_bajo_stock=productos_bajo_stock,
+        total_movimientos=total_movimientos,
+        movimientos_hoy=movimientos_hoy,
+        ultimos_movimientos=ultimos_movimientos,
+        productos_criticos=productos_criticos
+    )
+
+
+@app.route('/dashboard/data')
+@login_required
+def dashboard_data():
+    hoy = date.today()
+    inicio = hoy - timedelta(days=6)
+
+    # Movimientos últimos 7 días
+    movimientos = (
+        db.session.query(
+            func.date(Movimiento.fecha).label("dia"),
+            func.count(Movimiento.id)
+        )
+        .filter(func.date(Movimiento.fecha) >= inicio)
+        .group_by(func.date(Movimiento.fecha))
+        .order_by(func.date(Movimiento.fecha))
+        .all()
+    )
+
+    dias = [(inicio + timedelta(days=i)) for i in range(7)]
+    movimientos_por_dia = {m.dia: m[1] for m in movimientos}
+
+    labels = [d.strftime("%d/%m") for d in dias]
+    data_mov = [movimientos_por_dia.get(d, 0) for d in dias]
+
+    # Entradas vs salidas
+    entradas = Movimiento.query.filter_by(tipo="entrada").count()
+    salidas = Movimiento.query.filter_by(tipo="salida").count()
+
+    return {
+        "labels": labels,
+        "movimientos": data_mov,
+        "entradas": entradas,
+        "salidas": salidas
+    }
+
 
 
 
