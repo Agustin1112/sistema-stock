@@ -279,6 +279,9 @@ def index():
 
 
 
+from datetime import datetime, timedelta
+from sqlalchemy import func
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -292,7 +295,10 @@ def login():
 
         if user.locked_until and datetime.utcnow() < user.locked_until:
             remaining = (user.locked_until - datetime.utcnow()).seconds // 60 + 1
-            flash(f"Cuenta bloqueada por intentos fallidos. Probá en {remaining} minutos.", "danger")
+            flash(
+                f"Cuenta bloqueada por intentos fallidos. Probá en {remaining} minutos.",
+                "danger"
+            )
             return redirect(url_for('login'))
 
         if user.check_password(password):
@@ -303,14 +309,34 @@ def login():
             login_user(user)
             registrar_log("Inicio de sesión")
 
-            return redirect_por_rol(user)
+            # 🚨 ALERTA STOCK CRÍTICO (solo admin)
+            if user.is_admin():
+                productos_criticos = Producto.query.filter(
+                    Producto.stock <= Producto.minimo
+                ).count()
+
+                if productos_criticos > 0:
+                    flash(
+                        f"⚠️ Tenés {productos_criticos} productos con stock crítico. "
+                        f"<a href='{url_for('productos')}' class='alert-link'>Ver productos</a>",
+                        "warning"
+                    )
+
+            flash("Bienvenido al sistema", "success")
+
+            # 🔁 SIEMPRE IR A INICIO
+            return redirect(url_for('index'))
 
         else:
             user.failed_attempts = (user.failed_attempts or 0) + 1
+
             if user.failed_attempts >= MAX_FAILED_ATTEMPTS:
                 user.locked_until = datetime.utcnow() + timedelta(minutes=LOCK_MINUTES)
                 registrar_log(f"Cuenta bloqueada: {user.username}")
-                flash(f"Demasiados intentos. Cuenta bloqueada {LOCK_MINUTES} minutos.", "danger")
+                flash(
+                    f"Demasiados intentos. Cuenta bloqueada {LOCK_MINUTES} minutos.",
+                    "danger"
+                )
             else:
                 flash("Usuario o contraseña incorrectos.", "danger")
 
@@ -318,6 +344,8 @@ def login():
             return redirect(url_for('login'))
 
     return render_template('login.html')
+
+
 
 
 
@@ -817,14 +845,18 @@ def dashboard_data():
 
 
 @app.context_processor
-def stock_alertas():
+def stock_alerta_global():
     if current_user.is_authenticated and current_user.is_staff():
-        cantidad = Producto.query.filter(
+        count = Producto.query.filter(
             Producto.stock <= Producto.minimo
         ).count()
-        return dict(stock_critico_count=cantidad)
+    else:
+        count = 0
 
-    return dict(stock_critico_count=0)
+    return {
+        "stock_critico_count": count
+    }
+
 
 
 if __name__ == "__main__":
