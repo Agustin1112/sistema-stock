@@ -24,6 +24,13 @@
             color: #fff;
         }
 
+        /* 🔧 FIX SELECT / OPTION EN MODO OSCURO */
+        body.dark select,
+        body.dark option {
+            background-color: #ffffff !important;
+            color: #000000 !important;
+        }
+
         .navbar-brand {
             font-weight: bold;
         }
@@ -199,15 +206,14 @@
             </div>
 
             <div class="modal-body">
-    <p class="mb-2">
-        ⚠️ Tenés <strong>{{ stock_critico_count }}</strong>
-        producto(s) con stock crítico o sin stock.
-    </p>
-    <p class="mb-0 text-muted">
-        Te recomendamos revisarlos para evitar faltantes.
-    </p>
-</div>
-
+                <p class="mb-2">
+                    ⚠️ Tenés <strong>{{ stock_critico_count }}</strong>
+                    producto(s) con stock crítico o sin stock.
+                </p>
+                <p class="mb-0 text-muted">
+                    Te recomendamos revisarlos para evitar faltantes.
+                </p>
+            </div>
 
             <div class="modal-footer">
                 <a href="{{ url_for('productos', critico=1) }}" class="btn btn-danger">
@@ -250,22 +256,21 @@
         });
     }, 5000);
 
-    // Mostrar modal SOLO en inicio
+    // Mostrar modal SOLO una vez por día en inicio
     document.addEventListener("DOMContentLoaded", () => {
-    const esInicio = "{{ request.endpoint }}" === "index";
-    const modalEl = document.getElementById("stockModal");
+        const esInicio = "{{ request.endpoint }}" === "index";
+        const modalEl = document.getElementById("stockModal");
 
-    if (!esInicio || !modalEl) return;
+        if (!esInicio || !modalEl) return;
 
-    const hoy = new Date().toISOString().slice(0, 10);
-    const ultimaVez = localStorage.getItem("stockModalLastShown");
+        const hoy = new Date().toISOString().slice(0, 10);
+        const ultimaVez = localStorage.getItem("stockModalLastShown");
 
-    if (ultimaVez !== hoy) {
-        new bootstrap.Modal(modalEl).show();
-        localStorage.setItem("stockModalLastShown", hoy);
-    }
-});
-
+        if (ultimaVez !== hoy) {
+            new bootstrap.Modal(modalEl).show();
+            localStorage.setItem("stockModalLastShown", hoy);
+        }
+    });
 </script>
 
 {% block scripts %}{% endblock %}

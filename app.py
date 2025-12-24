@@ -16,7 +16,7 @@ from sqlalchemy import func
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'supersecretkey')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///stock.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(app.instance_path, 'stock.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 MAX_FAILED_ATTEMPTS = 5
@@ -272,15 +272,29 @@ def index():
         query = query.filter(Producto.stock > Producto.minimo)
 
     productos = query.all()
-    categorias = Categoria.query.filter_by(tipo="informatica", padre_id=None).order_by(Categoria.nombre).all()
 
-    return render_template('index.html', productos=productos, categorias=categorias,
-                           q_name=q_name, q_cat=q_cat, q_min=q_min, q_max=q_max, q_state=q_state)
+    categorias = Categoria.query.filter_by(
+        tipo="informatica",
+        padre_id=None
+    ).order_by(Categoria.nombre).all()
 
+    # 🔴 STOCK CRÍTICO (para modal / navbar / alertas)
+    productos_criticos = Producto.query.filter(
+        Producto.stock <= Producto.minimo
+    ).count()
 
+    return render_template(
+        'index.html',
+        productos=productos,
+        categorias=categorias,
+        q_name=q_name,
+        q_cat=q_cat,
+        q_min=q_min,
+        q_max=q_max,
+        q_state=q_state,
+        productos_criticos=productos_criticos
+    )
 
-from datetime import datetime, timedelta
-from sqlalchemy import func
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -622,26 +636,22 @@ def eliminar_categoria(id):
     return redirect(url_for('categorias'))
 
 
-@app.route('/productos')
+@app.route("/productos")
 @login_required
 def productos():
-    critico = request.args.get('critico')
+    productos = Producto.query.all()
 
-    if critico == '1':
-        productos = Producto.query.filter(
-            Producto.stock <= Producto.minimo
-        ).all()
-        titulo = "Productos con stock crítico"
-    else:
-        productos = Producto.query.all()
-        titulo = "Productos"
+    categorias = Categoria.query.filter_by(
+        tipo="informatica",
+        padre_id=None
+    ).order_by(Categoria.nombre).all()
 
     return render_template(
-        'productos.html',
+        "productos.html",
         productos=productos,
-        titulo=titulo,
-        critico=critico
+        categorias=categorias
     )
+
 
 
 
@@ -651,36 +661,58 @@ def productos():
 def agregar_producto():
     if not current_user.is_staff():
         return "No autorizado", 403
-    if request.method == 'GET':
-        categorias = Categoria.query.filter_by(tipo="informatica").order_by(Categoria.nombre).all()
-        return render_template('agregar.html', categorias=categorias)
 
-    nombre = request.form['nombre']
-    cantidad = int(request.form['cantidad'])
-    minimo = int(request.form['minimo'])
-    categoria_id = int(request.form['categoria'])
+    if request.method == 'POST':
+        nombre = request.form.get('nombre', '').strip()
+        cantidad = int(request.form.get('cantidad', 0))
+        minimo = int(request.form.get('minimo', 0))
+        categoria_id = request.form.get('categoria')
 
-    nuevo = Producto(nombre=nombre, stock=cantidad, minimo=minimo, categoria_id=categoria_id)
-    db.session.add(nuevo)
-    db.session.commit()
+        if not nombre or not categoria_id:
+            flash("Completa todos los campos.", "danger")
+            return redirect(url_for('agregar_producto'))
 
-    mov = Movimiento(producto_id=nuevo.id, tipo="entrada", cantidad=cantidad, usuario=current_user.username)
-    db.session.add(mov)
-    db.session.commit()
+        nuevo = Producto(
+            nombre=nombre,
+            stock=cantidad,
+            minimo=minimo,
+            categoria_id=int(categoria_id)
+        )
+        db.session.add(nuevo)
+        db.session.commit()
 
-    registrar_log(f"{current_user.username} agregó producto: {nombre}")
-    return redirect(url_for('index'))
+        mov = Movimiento(
+            producto_id=nuevo.id,
+            tipo="entrada",
+            cantidad=cantidad,
+            usuario=current_user.username
+        )
+        db.session.add(mov)
+        db.session.commit()
+
+        registrar_log(f"{current_user.username} agregó producto: {nombre}")
+        flash("Producto agregado correctamente.", "success")
+        return redirect(url_for('productos'))
+
+    # GET
+    categorias = Categoria.query.order_by(Categoria.nombre).all()
+    print("DEBUG: Categorías disponibles:", categorias)  # <- imprimimos en consola
+    return render_template('agregar.html', categorias=categorias)
+
+
+
 
 
 @app.route('/editar_producto/<int:id>', methods=['POST'])
 @login_required
 def editar_producto(id):
     prod = Producto.query.get_or_404(id)
+
     if not current_user.is_staff():
         return "No autorizado", 403
 
     nombre = request.form['nombre']
-    stock_nuevo = int(request.form['cantidad'])
+    stock_nuevo = int(request.form['stock'])   # 👈 clave
     minimo = int(request.form['minimo'])
     categoria_id = int(request.form['categoria'])
 
@@ -694,27 +726,48 @@ def editar_producto(id):
     if stock_nuevo != stock_anterior:
         tipo = "entrada" if stock_nuevo > stock_anterior else "salida"
         diferencia = abs(stock_nuevo - stock_anterior)
-        mov = Movimiento(producto_id=prod.id, tipo=tipo, cantidad=diferencia, usuario=current_user.username)
+
+        mov = Movimiento(
+            producto_id=prod.id,
+            tipo=tipo,
+            cantidad=diferencia,
+            usuario=current_user.username
+        )
         db.session.add(mov)
 
     db.session.commit()
-    registrar_log(f"{current_user.username} editó producto {prod.nombre} (stock {stock_anterior} → {stock_nuevo})")
+    registrar_log(
+        f"{current_user.username} editó producto {prod.nombre} "
+        f"(stock {stock_anterior} → {stock_nuevo})"
+    )
+
     flash("Producto editado.", "success")
-    return redirect(url_for('index'))
+    return redirect(url_for('productos'))
 
 
-@app.route('/eliminar_producto/<int:id>')
+
+@app.route('/eliminar_producto/<int:id>', methods=['POST'])
 @login_required
 @roles_required('admin')
 def eliminar_producto(id):
     p = Producto.query.get_or_404(id)
+
     if p.stock and p.stock > 0:
-        mov = Movimiento(producto_id=p.id, tipo="salida", cantidad=p.stock, usuario=current_user.username)
+        mov = Movimiento(
+            producto_id=p.id,
+            tipo="salida",
+            cantidad=p.stock,
+            usuario=current_user.username
+        )
         db.session.add(mov)
+
     registrar_log(f"Eliminó producto: {p.nombre}")
     db.session.delete(p)
     db.session.commit()
-    return redirect(url_for('index'))
+
+    flash("Producto eliminado.", "success")
+    return redirect(url_for('productos'))
+
 
 
 @app.route('/movimiento/<int:id>', methods=['POST'])

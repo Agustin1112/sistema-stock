@@ -1,23 +1,67 @@
 {% extends "base.html" %}
-{% block title %}{{ titulo if titulo else "Productos" }}{% endblock %}
+{% block title %}Productos{% endblock %}
 
 {% block content %}
 
 <h2 class="mb-4">
-  {% if critico == '1' %}
-    <i class="bi bi-exclamation-triangle text-danger"></i>
-  {% else %}
-    <i class="bi bi-box-seam"></i>
-  {% endif %}
-  {{ titulo if titulo else "Productos" }}
+  <i class="bi bi-box-seam"></i> Productos
 </h2>
 
-{% if critico == '1' %}
-  <a href="{{ url_for('productos') }}" class="btn btn-outline-secondary mb-3">
-    <i class="bi bi-arrow-left"></i> Ver todos los productos
-  </a>
+{% if current_user.is_staff() %}
+<!-- ================= BOTÓN AGREGAR PRODUCTO ================= -->
+<div class="mb-3">
+  <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addProductModal">
+    <i class="bi bi-plus-circle"></i> Agregar producto
+  </button>
+</div>
 {% endif %}
 
+<!-- ================= MODAL AGREGAR PRODUCTO ================= -->
+<div class="modal fade" id="addProductModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="POST" action="{{ url_for('agregar_producto') }}">
+        <div class="modal-header">
+          <h5 class="modal-title">Agregar producto</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body">
+          <div class="mb-2">
+            <label class="form-label">Nombre</label>
+            <input class="form-control" name="nombre" required>
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label">Stock</label>
+            <input class="form-control" type="number" name="stock" min="0" required>
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label">Stock mínimo</label>
+            <input class="form-control" type="number" name="minimo" min="0" required>
+          </div>
+
+          <div class="mb-2">
+            <label class="form-label">Categoría</label>
+            <select name="categoria" class="form-select" required>
+              {% for c in categorias %}
+              <option value="{{ c.id }}">{{ c.nombre }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-success">Agregar</button>
+          <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ================= TABLA PRODUCTOS ================= -->
 <div class="card shadow-sm">
   <div class="card-body">
 
@@ -43,47 +87,87 @@
             class="table-warning"
           {% endif %}
         >
-
           <td>{{ p.nombre }}</td>
           <td>{{ p.categoria.nombre }}</td>
-
-          <!-- 🚨 ALERTA VISUAL DE STOCK -->
-          <td>
-            {% if p.stock == 0 %}
-              <span class="badge bg-danger">
-                <i class="bi bi-x-circle"></i> Sin stock
-              </span>
-            {% elif p.stock <= p.minimo %}
-              <span class="badge bg-warning text-dark">
-                <i class="bi bi-exclamation-triangle"></i>
-                Bajo ({{ p.stock }})
-              </span>
-            {% else %}
-              <span class="badge bg-success">
-                <i class="bi bi-check-circle"></i>
-                OK ({{ p.stock }})
-              </span>
-            {% endif %}
-          </td>
-
+          <td>{{ p.stock }}</td>
           <td>{{ p.minimo }}</td>
 
           {% if current_user.is_admin() %}
           <td class="text-center">
-            <a href="#" class="btn btn-sm btn-outline-primary">
+
+            <!-- ✏️ EDITAR -->
+            <button class="btn btn-sm btn-outline-primary"
+                    data-bs-toggle="modal"
+                    data-bs-target="#editModal{{ p.id }}">
               <i class="bi bi-pencil"></i>
-            </a>
-            <a href="#" class="btn btn-sm btn-outline-danger">
-              <i class="bi bi-trash"></i>
-            </a>
+            </button>
+
+            <!-- 🗑️ ELIMINAR -->
+            <form method="POST"
+                  action="{{ url_for('eliminar_producto', id=p.id) }}"
+                  style="display:inline"
+                  onsubmit="return confirm('¿Eliminar producto?');">
+              <button class="btn btn-sm btn-outline-danger">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+
           </td>
           {% endif %}
-
         </tr>
+
+        <!-- ================= MODAL EDITAR PRODUCTO ================= -->
+        <div class="modal fade" id="editModal{{ p.id }}" tabindex="-1">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <form method="POST" action="{{ url_for('editar_producto', id=p.id) }}">
+                <div class="modal-header">
+                  <h5 class="modal-title">Editar producto</h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+
+                <div class="modal-body">
+                  <div class="mb-2">
+                    <label class="form-label">Nombre</label>
+                    <input class="form-control" name="nombre" value="{{ p.nombre }}" required>
+                  </div>
+
+                  <div class="mb-2">
+                    <label class="form-label">Stock</label>
+                    <input class="form-control" type="number" name="stock" value="{{ p.stock }}" required>
+                  </div>
+
+                  <div class="mb-2">
+                    <label class="form-label">Stock mínimo</label>
+                    <input class="form-control" type="number" name="minimo" value="{{ p.minimo }}" required>
+                  </div>
+
+                  <div class="mb-2">
+                    <label class="form-label">Categoría</label>
+                    <select name="categoria" class="form-select">
+                      {% for c in categorias %}
+                      <option value="{{ c.id }}"
+                        {% if c.id == p.categoria_id %}selected{% endif %}>
+                        {{ c.nombre }}
+                      </option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                </div>
+
+                <div class="modal-footer">
+                  <button class="btn btn-primary">Guardar cambios</button>
+                  <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+
         {% else %}
         <tr>
           <td colspan="5" class="text-center text-muted">
-            No hay productos para mostrar
+            No hay productos
           </td>
         </tr>
         {% endfor %}

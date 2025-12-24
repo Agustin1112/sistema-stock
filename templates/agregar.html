@@ -1,27 +1,73 @@
 {% extends 'base.html' %}
+
+{% block title %}Agregar Producto{% endblock %}
+
 {% block content %}
-<h2>Agregar Producto</h2>
-<form method="POST" class="col-md-6">
-  <div class="mb-3">
-    <label class="form-label">Nombre</label>
-    <input type="text" name="nombre" class="form-control" required>
-  </div>
-  <div class="mb-3">
-    <label class="form-label">Cantidad</label>
-    <input type="number" name="cantidad" class="form-control" required>
-  </div>
-  <div class="mb-3">
-    <label class="form-label">Stock mínimo</label>
-    <input type="number" name="minimo" class="form-control" required>
-  </div>
-  <div class="mb-3">
-    <label class="form-label">Categoría</label>
-    <select name="categoria" class="form-select" required>
-      {% for c in categorias %}
-      <option value="{{ c.id }}">{{ c.nombre }}</option>
-      {% endfor %}
-    </select>
-  </div>
-  <button type="submit" class="btn btn-success">💾 Guardar</button>
-</form>
+<div class="container mt-4">
+
+  <h2 class="mb-4">
+    <i class="bi bi-box-seam"></i> Agregar Producto
+  </h2>
+
+  <form method="POST" action="{{ url_for('agregar_producto') }}" class="col-md-6">
+
+    <!-- Nombre -->
+    <div class="mb-3">
+      <label class="form-label">Nombre</label>
+      <input type="text"
+             name="nombre"
+             class="form-control"
+             required>
+    </div>
+
+    <!-- Stock -->
+    <div class="mb-3">
+      <label class="form-label">Stock</label>
+      <input type="number"
+             name="cantidad"
+             class="form-control"
+             min="0"
+             required>
+    </div>
+
+    <!-- Stock mínimo -->
+    <div class="mb-3">
+      <label class="form-label">Stock mínimo</label>
+      <input type="number"
+             name="minimo"
+             class="form-control"
+             min="0"
+             required>
+    </div>
+
+    <!-- Categoría -->
+    <div class="mb-3">
+      <label class="form-label">Categoría</label>
+
+      <select name="categoria"
+              id="categoria"
+              class="form-select bg-white text-dark"
+              style="color:#000;"
+              required>
+
+        <option value="" style="color:#000;">
+          -- Seleccione una categoría --
+        </option>
+
+        {% for c in categorias %}
+          <option value="{{ c.id }}" style="color:#000;">
+            {{ c.nombre }}
+          </option>
+        {% endfor %}
+
+      </select>
+    </div>
+
+    <!-- Botón -->
+    <button type="submit" class="btn btn-success">
+      <i class="bi bi-plus-circle"></i> Guardar producto
+    </button>
+
+  </form>
+</div>
 {% endblock %}
