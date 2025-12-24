@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-
 {% block title %}Dashboard | StockApp{% endblock %}
 
 {% block content %}
@@ -8,6 +7,7 @@
     <i class="bi bi-speedometer2"></i> Dashboard
 </h2>
 
+<!-- ================= KPIs ================= -->
 <div class="row g-4 mb-4">
 
     <div class="col-md-3">
@@ -29,26 +29,77 @@
     </div>
 
     <div class="col-md-3">
-        <div class="card text-bg-secondary">
+        <div class="card text-bg-success">
             <div class="card-body">
-                <h6>Movimientos totales</h6>
-                <h3>{{ total_movimientos }}</h3>
+                <h6>Entradas hoy</h6>
+                <h3>{{ entradas_hoy }}</h3>
             </div>
         </div>
     </div>
 
     <div class="col-md-3">
-        <div class="card text-bg-success">
+        <div class="card text-bg-warning">
             <div class="card-body">
-                <h6>Movimientos hoy</h6>
-                <h3>{{ movimientos_hoy }}</h3>
+                <h6>Salidas hoy</h6>
+                <h3>{{ salidas_hoy }}</h3>
             </div>
         </div>
     </div>
 
 </div>
 
-<div class="row">
+<div class="row g-4 mb-4">
+
+    <div class="col-md-3">
+        <div class="card border-success">
+            <div class="card-body">
+                <h6>Entradas totales</h6>
+                <h4>{{ entradas_totales }}</h4>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card border-warning">
+            <div class="card-body">
+                <h6>Salidas totales</h6>
+                <h4>{{ salidas_totales }}</h4>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card border-secondary">
+            <div class="card-body">
+                <h6>Movimientos totales</h6>
+                <h4>{{ total_movimientos }}</h4>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card border-info">
+            <div class="card-body">
+                <h6>Movimientos hoy</h6>
+                <h4>{{ movimientos_hoy }}</h4>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ================= GRÁFICO ================= -->
+<div class="card mb-4">
+    <div class="card-header">
+        <i class="bi bi-bar-chart"></i> Entradas vs Salidas (últimos 7 días)
+    </div>
+    <div class="card-body">
+        <canvas id="movimientosChart"></canvas>
+    </div>
+</div>
+
+<!-- ================= LISTADOS ================= -->
+<div class="row g-4">
 
     <div class="col-md-6">
         <div class="card">
@@ -59,8 +110,8 @@
                 {% for m in ultimos_movimientos %}
                 <li class="list-group-item">
                     {{ m.fecha.strftime('%d/%m %H:%M') }} —
-                    {{ m.tipo }} —
-                    {{ m.producto.nombre }}
+                    <strong>{{ m.tipo }}</strong> —
+                    {{ m.producto.nombre }} ({{ m.cantidad }})
                 </li>
                 {% else %}
                 <li class="list-group-item text-muted">
@@ -92,4 +143,45 @@
 
 </div>
 
+{% endblock %}
+
+{% block scripts %}
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+const ctx = document.getElementById('movimientosChart');
+
+new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: {{ dias | tojson }},
+        datasets: [
+            {
+                label: 'Entradas',
+                data: {{ entradas | tojson }},
+                backgroundColor: 'rgba(25, 135, 84, 0.7)'
+            },
+            {
+                label: 'Salidas',
+                data: {{ salidas | tojson }},
+                backgroundColor: 'rgba(220, 53, 69, 0.7)'
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'top'
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    }
+});
+</script>
 {% endblock %}

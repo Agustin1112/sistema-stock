@@ -822,6 +822,9 @@ def logs():
     registros = Log.query.order_by(Log.fecha.desc()).all()
     return render_template('logs.html', logs=registros)
 
+from datetime import date
+from sqlalchemy import func
+
 @app.route('/dashboard')
 @login_required
 def dashboard():
@@ -829,6 +832,7 @@ def dashboard():
         flash("No tenés permisos para acceder al dashboard.", "danger")
         return redirect(url_for('index'))
 
+    # ================= GENERALES =================
     total_productos = Producto.query.count()
 
     productos_bajo_stock = Producto.query.filter(
@@ -841,6 +845,31 @@ def dashboard():
         func.date(Movimiento.fecha) == date.today()
     ).count()
 
+    # ================= ENTRADAS =================
+    entradas_totales = db.session.query(
+        func.coalesce(func.sum(Movimiento.cantidad), 0)
+    ).filter(Movimiento.tipo == 'entrada').scalar()
+
+    entradas_hoy = db.session.query(
+        func.coalesce(func.sum(Movimiento.cantidad), 0)
+    ).filter(
+        Movimiento.tipo == 'entrada',
+        func.date(Movimiento.fecha) == date.today()
+    ).scalar()
+
+    # ================= SALIDAS =================
+    salidas_totales = db.session.query(
+        func.coalesce(func.sum(Movimiento.cantidad), 0)
+    ).filter(Movimiento.tipo == 'salida').scalar()
+
+    salidas_hoy = db.session.query(
+        func.coalesce(func.sum(Movimiento.cantidad), 0)
+    ).filter(
+        Movimiento.tipo == 'salida',
+        func.date(Movimiento.fecha) == date.today()
+    ).scalar()
+
+    # ================= LISTADOS =================
     ultimos_movimientos = Movimiento.query.order_by(
         Movimiento.fecha.desc()
     ).limit(5).all()
@@ -849,15 +878,64 @@ def dashboard():
         Producto.stock <= Producto.minimo
     ).all()
 
+    # ================= GRÁFICO (7 DÍAS) =================
+    hoy = date.today()
+    inicio = hoy - timedelta(days=6)
+
+    movimientos = (
+        db.session.query(
+            func.date(Movimiento.fecha).label("dia"),
+            Movimiento.tipo,
+            func.sum(Movimiento.cantidad).label("total")
+        )
+        .filter(func.date(Movimiento.fecha) >= inicio)
+        .group_by(func.date(Movimiento.fecha), Movimiento.tipo)
+        .all()
+    )
+
+    dias = [(inicio + timedelta(days=i)).strftime("%d/%m") for i in range(7)]
+    entradas = {d: 0 for d in dias}
+    salidas = {d: 0 for d in dias}
+
+    for m in movimientos:
+    # m.dia viene como string "YYYY-MM-DD" desde SQLite
+     dia = m.dia[-5:]   # "MM-DD"
+    dia = dia[3:]      # "DD/MM"
+
+    if m.tipo == "entrada":
+        entradas[dia] = m.total
+    elif m.tipo == "salida":
+        salidas[dia] = m.total
+
+
+
+    # ================= RENDER =================
     return render_template(
         'dashboard.html',
+
+        # métricas generales
         total_productos=total_productos,
         productos_bajo_stock=productos_bajo_stock,
         total_movimientos=total_movimientos,
         movimientos_hoy=movimientos_hoy,
+
+        # métricas separadas
+        entradas_totales=entradas_totales,
+        entradas_hoy=entradas_hoy,
+        salidas_totales=salidas_totales,
+        salidas_hoy=salidas_hoy,
+
+        # listados
         ultimos_movimientos=ultimos_movimientos,
-        productos_criticos=productos_criticos
+        productos_criticos=productos_criticos,
+
+        # gráfico
+        dias=dias,
+        entradas=list(entradas.values()),
+        salidas=list(salidas.values())
     )
+
+
 
 
 
